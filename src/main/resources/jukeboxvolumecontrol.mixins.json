@@ -1,0 +1,15 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.redstone.jukeboxvolumecontrol.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "JukeboxMixin",
+    "JukeboxBreakMixin",
+    "SoundSystemMixin",
+    "ClientInteractionMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
