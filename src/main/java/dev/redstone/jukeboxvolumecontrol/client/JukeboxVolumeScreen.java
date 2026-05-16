@@ -1,15 +1,16 @@
 package dev.redstone.jukeboxvolumecontrol.client;
 
 import dev.redstone.jukeboxvolumecontrol.JukeboxVolumeManager;
+import dev.redstone.jukeboxvolumecontrol.network.JukeboxSettingsPayload;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
-import net.minecraft.sound.SoundCategory;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.BlockPos;
 
@@ -54,11 +55,14 @@ public final class JukeboxVolumeScreen extends Screen {
     private final BlockPos jukeboxPos;
     private final Screen   parent;
 
+    // Snapshot of settings when the screen was opened, for cancel rollback
+    private final float originalVolume;
+    private final float originalPitch;
+    private final int   originalColor;
+
     private int   r, g, b;
     private float hue, sat, val;
-
     private float volume;
-
     private float pitch;
 
     private TextFieldWidget hexField;
@@ -89,6 +93,17 @@ public final class JukeboxVolumeScreen extends Screen {
         this.hue = hsv[0];
         this.sat = hsv[1];
         this.val = hsv[2];
+
+        // Save originals for cancel
+        this.originalVolume = this.volume;
+        this.originalPitch  = this.pitch;
+        this.originalColor  = rgb;
+    }
+
+    /** Send current settings to the server, which broadcasts to all clients. */
+    private void sendUpdate() {
+        ClientPlayNetworking.send(new JukeboxSettingsPayload(
+                jukeboxPos, volume, pitch, (r << 16) | (g << 8) | b));
     }
 
     @Override
@@ -116,6 +131,7 @@ public final class JukeboxVolumeScreen extends Screen {
                     float[] hsv = rgbToHsv(r, g, b);
                     hue = hsv[0]; sat = hsv[1]; val = hsv[2];
                     syncFromRgb(false);
+                    sendUpdate();
                 } catch (NumberFormatException ignored) {}
             }
         });
@@ -126,9 +142,9 @@ public final class JukeboxVolumeScreen extends Screen {
         int gX   = rX + FIELD_W_RGB + 22;
         int bX   = gX + FIELD_W_RGB + 22;
 
-        rField = makeRgbField(rX, rgbY, r, v -> { r = v; recalcHsv(); syncFromRgb(true); });
-        gField = makeRgbField(gX, rgbY, g, v -> { g = v; recalcHsv(); syncFromRgb(true); });
-        bField = makeRgbField(bX, rgbY, b, v -> { b = v; recalcHsv(); syncFromRgb(true); });
+        rField = makeRgbField(rX, rgbY, r, v -> { r = v; recalcHsv(); syncFromRgb(true); sendUpdate(); });
+        gField = makeRgbField(gX, rgbY, g, v -> { g = v; recalcHsv(); syncFromRgb(true); sendUpdate(); });
+        bField = makeRgbField(bX, rgbY, b, v -> { b = v; recalcHsv(); syncFromRgb(true); sendUpdate(); });
         addDrawableChild(rField);
         addDrawableChild(gField);
         addDrawableChild(bField);
@@ -213,49 +229,46 @@ public final class JukeboxVolumeScreen extends Screen {
             }
         int argb = 0xFF000000 | (r << 16) | (g << 8) | b;
         ctx.fillGradient(swX, fieldsY, swX + SWATCH, fieldsY + SWATCH, argb, argb);
-        drawBorder(ctx, swX - 1, fieldsY - 1, SWATCH + 2, SWATCH + 2);
 
-        ctx.drawTextWithShadow(textRenderer, Text.literal("#"),
-                swX + SWATCH + 6, fieldsY + 1, TEXT_MUTED);
-        drawFieldBox(ctx, hexField.getX() - 2, fieldsY - 3, FIELD_W_HEX + 4, FIELD_H + 6);
+        int hexLabelX = swX + SWATCH + 4;
+        ctx.drawTextWithShadow(textRenderer, Text.literal("#"), hexLabelX, fieldsY + 2, TEXT_MUTED);
 
         int rgbY = fieldsY + FIELD_H + 6;
-        ctx.drawTextWithShadow(textRenderer, Text.literal("R"), px + SV_X_OFF,           rgbY + 5, 0xFFFF8888);
-        ctx.drawTextWithShadow(textRenderer, Text.literal("G"), rField.getX() + FIELD_W_RGB + 6, rgbY + 5, 0xFF88FF88);
-        ctx.drawTextWithShadow(textRenderer, Text.literal("B"), gField.getX() + FIELD_W_RGB + 6, rgbY + 5, 0xFF88AAFF);
+        ctx.drawTextWithShadow(textRenderer, Text.literal("R"), rField.getX() - 8, rgbY + 2, 0xFFFF6B6B);
+        ctx.drawTextWithShadow(textRenderer, Text.literal("G"), gField.getX() - 8, rgbY + 2, 0xFF6BFF6B);
+        ctx.drawTextWithShadow(textRenderer, Text.literal("B"), bField.getX() - 8, rgbY + 2, 0xFF6B9FFF);
 
-        rField.setPosition(rField.getX(), rgbY + 5);
-        gField.setPosition(gField.getX(), rgbY + 5);
-        bField.setPosition(bField.getX(), rgbY + 5);
+        ctx.fill(rField.getX() - 1, rgbY - 1, rField.getX() + FIELD_W_RGB + 1, rgbY + FIELD_H + 1, INPUT_BORDER);
+        ctx.fill(rField.getX(), rgbY, rField.getX() + FIELD_W_RGB, rgbY + FIELD_H, INPUT_BG);
+        ctx.fill(gField.getX() - 1, rgbY - 1, gField.getX() + FIELD_W_RGB + 1, rgbY + FIELD_H + 1, INPUT_BORDER);
+        ctx.fill(gField.getX(), rgbY, gField.getX() + FIELD_W_RGB, rgbY + FIELD_H, INPUT_BG);
+        ctx.fill(bField.getX() - 1, rgbY - 1, bField.getX() + FIELD_W_RGB + 1, rgbY + FIELD_H + 1, INPUT_BORDER);
+        ctx.fill(bField.getX(), rgbY, bField.getX() + FIELD_W_RGB, rgbY + FIELD_H, INPUT_BG);
 
-        drawFieldBox(ctx, rField.getX() - 2, rField.getY() - 3, FIELD_W_RGB + 4, FIELD_H + 6);
-        drawFieldBox(ctx, gField.getX() - 2, gField.getY() - 3, FIELD_W_RGB + 4, FIELD_H + 6);
-        drawFieldBox(ctx, bField.getX() - 2, bField.getY() - 3, FIELD_W_RGB + 4, FIELD_H + 6);
+        int hexFieldX = hexField.getX();
+        ctx.fill(hexFieldX - 1, fieldsY - 1, hexFieldX + FIELD_W_HEX + 1, fieldsY + FIELD_H + 1, INPUT_BORDER);
+        ctx.fill(hexFieldX, fieldsY, hexFieldX + FIELD_W_HEX, fieldsY + FIELD_H, INPUT_BG);
     }
 
     private void drawVolumeBar(DrawContext ctx, int mouseX, int mouseY) {
-        int volX  = px + VOL_X_OFF;
-        int volY  = py + SV_Y_OFF;
-        int volH  = SV_H;
+        int volX = px + VOL_X_OFF;
+        int svY  = py + SV_Y_OFF;
 
-        ctx.fillGradient(volX, volY, volX + VOL_W, volY + volH, INPUT_BG, INPUT_BG);
-        drawBorder(ctx, volX - 1, volY - 1, VOL_W + 2, volH + 2);
-
-        int fillH = Math.round(volume * volH);
-        if (fillH > 0) {
-            ctx.fillGradient(volX, volY + volH - fillH, volX + VOL_W, volY + volH,
-                    ACCENT, adjustBrightness(ACCENT, 0.7f));
+        int filled = Math.round(volume * SV_H);
+        ctx.fillGradient(volX, svY, volX + VOL_W, svY + SV_H, INPUT_BG, INPUT_BG);
+        if (filled > 0) {
+            ctx.fillGradient(volX, svY + (SV_H - filled), volX + VOL_W, svY + SV_H, ACCENT, adjustBrightness(ACCENT, 0.7f));
         }
+        drawBorder(ctx, volX - 1, svY - 1, VOL_W + 2, SV_H + 2);
+
+        int volLabelY = svY + SV_H + 3;
+        ctx.drawTextWithShadow(textRenderer, Text.literal("VOL"), volX, volLabelY, TEXT_MUTED);
 
         int pct = Math.round(volume * 100);
-        String volLabel = pct + "%";
-        ctx.drawTextWithShadow(textRenderer, Text.literal(volLabel),
-                volX + VOL_W / 2 - textRenderer.getWidth(volLabel) / 2,
-                volY + volH + 4, TEXT_MUTED);
-
-        ctx.drawTextWithShadow(textRenderer, Text.literal("VOL"),
-                volX + VOL_W / 2 - textRenderer.getWidth("VOL") / 2,
-                volY - 10, TEXT_MUTED);
+        String pctStr = pct + "%";
+        int pctW = textRenderer.getWidth(pctStr);
+        ctx.drawTextWithShadow(textRenderer, Text.literal(pctStr),
+                volX + (VOL_W - pctW) / 2, volLabelY + 10, TEXT_PRIMARY);
     }
 
     private void drawPitchSlider(DrawContext ctx, int mouseX, int mouseY) {
@@ -263,50 +276,40 @@ public final class JukeboxVolumeScreen extends Screen {
         int pitchY = py + PITCH_Y_OFF;
         int pitchW = VOL_X_OFF + VOL_W;
 
-        ctx.fillGradient(pitchX, pitchY, pitchX + pitchW, pitchY + PITCH_H,
-                INPUT_BG, INPUT_BG);
+        ctx.fillGradient(pitchX, pitchY, pitchX + pitchW, pitchY + PITCH_H, INPUT_BG, INPUT_BG);
         drawBorder(ctx, pitchX - 1, pitchY - 1, pitchW + 2, PITCH_H + 2);
 
         float t = (pitch - 0.5f) / 1.5f;
-        int fillW = Math.round(t * pitchW);
-        if (fillW > 0) {
-            ctx.fillGradient(pitchX, pitchY, pitchX + fillW, pitchY + PITCH_H,
-                    0xFF7BCF6A, 0xFF4FA33B);
-        }
+        int handleX = pitchX + Math.round(t * (pitchW - 1));
+        ctx.fillGradient(handleX - 3, pitchY - 3, handleX + 3, pitchY + PITCH_H + 3, ACCENT, ACCENT);
 
-        int knobX = pitchX + fillW;
-        ctx.fillGradient(knobX - 2, pitchY - 3, knobX + 2, pitchY + PITCH_H + 3,
-                0xFFFFFFFF, 0xFFCCCCCC);
-
-        String pitchLabel = "Pitch: " + String.format("%.2f", pitch) + "x";
-        ctx.drawTextWithShadow(textRenderer, Text.literal(pitchLabel),
-                pitchX, pitchY - 8, TEXT_MUTED);
+        int labelY = pitchY - 14;
+        ctx.drawTextWithShadow(textRenderer, Text.literal("PITCH"), pitchX, labelY, TEXT_MUTED);
+        String pitchStr = String.format("%.2fx", pitch);
+        int pitchStrW = textRenderer.getWidth(pitchStr);
+        ctx.drawTextWithShadow(textRenderer, Text.literal(pitchStr),
+                pitchX + pitchW - pitchStrW, labelY, TEXT_PRIMARY);
     }
 
     private void drawModal(DrawContext ctx) {
-        ctx.fillGradient(px, py, px + POP_W, py + POP_H, BG, BG);
-        drawBorder(ctx, px, py, POP_W, POP_H);
+        ctx.fill(px, py, px + POP_W, py + POP_H, BORDER);
+        ctx.fill(px + 1, py + 1, px + POP_W - 1, py + POP_H - 1, BG);
     }
 
     private void drawBorder(DrawContext ctx, int x, int y, int w, int h) {
-        ctx.fillGradient(x,         y,         x + w,     y + 1,     BORDER, BORDER);
-        ctx.fillGradient(x,         y + h - 1, x + w,     y + h,     BORDER, BORDER);
-        ctx.fillGradient(x,         y,         x + 1,     y + h,     BORDER, BORDER);
-        ctx.fillGradient(x + w - 1, y,         x + w,     y + h,     BORDER, BORDER);
-    }
-
-    private void drawFieldBox(DrawContext ctx, int x, int y, int w, int h) {
-        ctx.fillGradient(x,     y,     x + w,     y + h,     INPUT_BORDER, INPUT_BORDER);
-        ctx.fillGradient(x + 1, y + 1, x + w - 1, y + h - 1, INPUT_BG,    INPUT_BG);
+        ctx.fill(x, y, x + w, y + 1, BORDER);
+        ctx.fill(x, y + h - 1, x + w, y + h, BORDER);
+        ctx.fill(x, y, x + 1, y + h, BORDER);
+        ctx.fill(x + w - 1, y, x + w, y + h, BORDER);
     }
 
     @Override
     public boolean mouseClicked(Click click, boolean primary) {
         double mx = click.x(), my = click.y();
 
-        int svX   = px + SV_X_OFF,  svY  = py + SV_Y_OFF;
-        int hueX  = px + HUE_X_OFF;
-        int volX  = px + VOL_X_OFF;
+        int svX    = px + SV_X_OFF, svY = py + SV_Y_OFF;
+        int hueX   = px + HUE_X_OFF;
+        int volX   = px + VOL_X_OFF;
         int pitchX = px + SV_X_OFF;
         int pitchY = py + PITCH_Y_OFF;
         int pitchW = VOL_X_OFF + VOL_W;
@@ -337,7 +340,7 @@ public final class JukeboxVolumeScreen extends Screen {
 
     @Override
     public boolean mouseDragged(Click click, double dx, double dy) {
-        int svX    = px + SV_X_OFF,  svY  = py + SV_Y_OFF;
+        int svX    = px + SV_X_OFF, svY = py + SV_Y_OFF;
         int hueX   = px + HUE_X_OFF;
         int volX   = px + VOL_X_OFF;
         int pitchX = px + SV_X_OFF;
@@ -377,6 +380,7 @@ public final class JukeboxVolumeScreen extends Screen {
         int svY  = py + SV_Y_OFF;
         if (inRect(mx, my, volX, svY, VOL_W, SV_H)) {
             volume = clampF(volume + (float) vScroll * 0.05f, 0f, 1f);
+            sendUpdate();
             return true;
         }
         return super.mouseScrolled(mx, my, hScroll, vScroll);
@@ -390,6 +394,7 @@ public final class JukeboxVolumeScreen extends Screen {
         val = clampF(val, 0f, 1f);
         updateRgbFromHsv();
         syncFromRgb(true);
+        sendUpdate();
     }
 
     private void applyHuePick(double my) {
@@ -398,15 +403,14 @@ public final class JukeboxVolumeScreen extends Screen {
         hue = clampF(hue, 0f, 360f);
         updateRgbFromHsv();
         syncFromRgb(true);
+        sendUpdate();
     }
 
     private void applyVolumePick(double my) {
         int svY = py + SV_Y_OFF;
         volume = 1f - (float) ((my - svY) / (SV_H - 1));
         volume = clampF(volume, 0f, 1f);
-        JukeboxVolumeManager.setVolume(jukeboxPos, volume);
-        if (client != null && client.getSoundManager() != null)
-            client.getSoundManager().refreshSoundVolumes(SoundCategory.RECORDS);
+        sendUpdate();
     }
 
     private void applyPitchPick(double mx) {
@@ -415,7 +419,7 @@ public final class JukeboxVolumeScreen extends Screen {
         float t = (float) ((mx - pitchX) / (pitchW - 1));
         t = clampF(t, 0f, 1f);
         pitch = 0.5f + t * 1.5f;
-        JukeboxVolumeManager.setPitch(jukeboxPos, pitch);
+        sendUpdate();
     }
 
     private void recalcHsv() {
@@ -440,21 +444,19 @@ public final class JukeboxVolumeScreen extends Screen {
     }
 
     private void confirm() {
-        JukeboxVolumeManager.setSettings(jukeboxPos, volume, pitch, (r << 16) | (g << 8) | b);
-        if (client != null && client.getSoundManager() != null)
-            client.getSoundManager().refreshSoundVolumes(SoundCategory.RECORDS);
+        // Settings already live on the server from real-time updates, just close
         close();
     }
 
     private void cancel() {
-        JukeboxVolumeManager.JukeboxSettings original = JukeboxVolumeManager.getSettings(jukeboxPos);
-        JukeboxVolumeManager.setVolume(jukeboxPos, original.volume());
+        // Roll back to the original settings by sending them back to the server
+        ClientPlayNetworking.send(new JukeboxSettingsPayload(jukeboxPos, originalVolume, originalPitch, originalColor));
         close();
     }
 
-    @Override public boolean shouldPause()        { return false; }
-    @Override public boolean shouldCloseOnEsc()   { return true; }
-    @Override public void close()                 { if (client != null) client.setScreen(parent); }
+    @Override public boolean shouldPause()      { return false; }
+    @Override public boolean shouldCloseOnEsc() { return true; }
+    @Override public void close()               { if (client != null) client.setScreen(parent); }
 
     private static boolean inRect(double x, double y, int rx, int ry, int rw, int rh) {
         return x >= rx && x <= rx + rw && y >= ry && y <= ry + rh;

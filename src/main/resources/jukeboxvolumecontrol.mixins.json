@@ -5,9 +5,11 @@
   "compatibilityLevel": "JAVA_21",
   "client": [
     "JukeboxMixin",
-    "JukeboxBreakMixin",
     "SoundSystemMixin",
     "ClientInteractionMixin"
+  ],
+  "mixins": [
+    "JukeboxBreakMixin"
   ],
   "injectors": {
     "defaultRequire": 1
