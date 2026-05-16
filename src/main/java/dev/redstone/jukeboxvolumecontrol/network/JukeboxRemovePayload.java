@@ -6,9 +6,6 @@ import net.minecraft.network.packet.CustomPayload;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 
-/**
- * Sent Server → Client when a jukebox is broken, so all clients clear its settings.
- */
 public record JukeboxRemovePayload(BlockPos pos) implements CustomPayload {
 
     public static final Id<JukeboxRemovePayload> ID =

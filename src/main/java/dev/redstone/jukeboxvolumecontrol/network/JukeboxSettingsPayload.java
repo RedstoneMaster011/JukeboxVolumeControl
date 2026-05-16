@@ -7,11 +7,6 @@ import net.minecraft.network.packet.CustomPayload;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 
-/**
- * Sent in BOTH directions:
- *  - Client → Server: player confirmed new settings in the GUI
- *  - Server → Client: broadcast updated settings to all players
- */
 public record JukeboxSettingsPayload(BlockPos pos, float volume, float pitch, int color)
         implements CustomPayload {
 

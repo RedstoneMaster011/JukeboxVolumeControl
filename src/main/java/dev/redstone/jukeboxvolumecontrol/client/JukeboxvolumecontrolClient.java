@@ -14,20 +14,17 @@ public class JukeboxvolumecontrolClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
-        // Register the color renderer
         BlockEntityRendererFactories.register(
                 BlockEntityType.JUKEBOX,
                 JukeboxColorRenderer::new
         );
 
-        // Receive settings broadcast from the server → apply locally
         ClientPlayNetworking.registerGlobalReceiver(JukeboxSettingsPayload.ID,
                 (payload, context) -> {
                     context.client().execute(() -> {
                         JukeboxVolumeManager.setSettings(
                                 payload.pos(), payload.volume(), payload.pitch(), payload.color());
 
-                        // Refresh audio so changes take effect immediately
                         MinecraftClient client = MinecraftClient.getInstance();
                         if (client.getSoundManager() != null) {
                             client.getSoundManager().refreshSoundVolumes(SoundCategory.RECORDS);
@@ -35,7 +32,6 @@ public class JukeboxvolumecontrolClient implements ClientModInitializer {
                     });
                 });
 
-        // Receive remove notification from the server → clear locally
         ClientPlayNetworking.registerGlobalReceiver(JukeboxRemovePayload.ID,
                 (payload, context) -> {
                     context.client().execute(() -> {

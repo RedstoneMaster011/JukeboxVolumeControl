@@ -55,7 +55,6 @@ public final class JukeboxVolumeScreen extends Screen {
     private final BlockPos jukeboxPos;
     private final Screen   parent;
 
-    // Snapshot of settings when the screen was opened, for cancel rollback
     private final float originalVolume;
     private final float originalPitch;
     private final int   originalColor;
@@ -94,13 +93,11 @@ public final class JukeboxVolumeScreen extends Screen {
         this.sat = hsv[1];
         this.val = hsv[2];
 
-        // Save originals for cancel
         this.originalVolume = this.volume;
         this.originalPitch  = this.pitch;
         this.originalColor  = rgb;
     }
 
-    /** Send current settings to the server, which broadcasts to all clients. */
     private void sendUpdate() {
         ClientPlayNetworking.send(new JukeboxSettingsPayload(
                 jukeboxPos, volume, pitch, (r << 16) | (g << 8) | b));
@@ -444,12 +441,10 @@ public final class JukeboxVolumeScreen extends Screen {
     }
 
     private void confirm() {
-        // Settings already live on the server from real-time updates, just close
         close();
     }
 
     private void cancel() {
-        // Roll back to the original settings by sending them back to the server
         ClientPlayNetworking.send(new JukeboxSettingsPayload(jukeboxPos, originalVolume, originalPitch, originalColor));
         close();
     }
