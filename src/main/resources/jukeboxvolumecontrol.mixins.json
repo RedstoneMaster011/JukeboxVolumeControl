@@ -4,12 +4,13 @@
   "package": "dev.redstone.jukeboxvolumecontrol.mixin",
   "compatibilityLevel": "JAVA_21",
   "client": [
+    "ClientInteractionMixin",
     "JukeboxMixin",
-    "SoundSystemMixin",
-    "ClientInteractionMixin"
+    "SoundSystemMixin"
   ],
   "mixins": [
-    "JukeboxBreakMixin"
+    "JukeboxBreakMixin",
+    "JukeboxManagerMixin"
   ],
   "injectors": {
     "defaultRequire": 1

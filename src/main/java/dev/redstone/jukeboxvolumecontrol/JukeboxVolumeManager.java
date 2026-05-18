@@ -1,7 +1,9 @@
 package dev.redstone.jukeboxvolumecontrol;
 
+import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -10,6 +12,8 @@ public class JukeboxVolumeManager {
     public record JukeboxSettings(float volume, float pitch, int color) {}
 
     private static final Map<BlockPos, JukeboxSettings> settingsMap = new HashMap<>();
+
+    private static final Map<BlockPos, Identifier> activeSoundIds = new HashMap<>();
 
     public static void setVolume(BlockPos pos, float volume) {
         JukeboxSettings old = settingsMap.getOrDefault(pos.toImmutable(),
@@ -61,8 +65,21 @@ public class JukeboxVolumeManager {
                 new JukeboxSettings(1.0f, 1.0f, 0xFFFFFF));
     }
 
+    public static Map<BlockPos, JukeboxSettings> getAllSettings() {
+        return Collections.unmodifiableMap(settingsMap);
+    }
+
     public static void remove(BlockPos pos) {
         settingsMap.remove(pos.toImmutable());
+        activeSoundIds.remove(pos.toImmutable());
+    }
+
+    public static void trackActiveSound(BlockPos pos, Identifier soundId) {
+        activeSoundIds.put(pos.toImmutable(), soundId);
+    }
+
+    public static Identifier popActiveSound(BlockPos pos) {
+        return activeSoundIds.remove(pos.toImmutable());
     }
 
     private static float clampVolume(float v) { return Math.max(0.0f, Math.min(1.0f, v)); }
